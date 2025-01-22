@@ -22,6 +22,8 @@ def get_model_and_tokenizer(model_name):
     with maybe_wait(wait=torch.distributed.get_node_local_rank() != 0):
         tokenizer = WrappedHFTokenizer(model_name) 
         model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2", trust_remote_code=True)
+        model.config.use_cache = False
+        model.eval()
 
     return model, tokenizer
 
