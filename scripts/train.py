@@ -1,3 +1,6 @@
+# Modified from torchtitan
+# Copyright 2025 Honglu Fan as well as the original authors
+# --- original copyright below ---
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # All rights reserved.
 #
@@ -32,6 +35,7 @@ from torchtitan.parallelisms import (
 )
 from torchtitan.profiling import maybe_enable_memory_snapshot, maybe_enable_profiling
 from torchtitan.utils import device_module, device_type
+import wandb
 
 from ft.parallelism import parallelize_model
 from ft.utils import get_model_and_tokenizer, hf_to_titan_config
@@ -238,6 +242,10 @@ def main(job_config: JobConfig):
         f"total steps {job_config.training.steps} "
         f"(warmup {job_config.training.warmup_steps})"
     )
+    wandb.init(
+        project="mt_pred",
+        config=job_config.args_dict,
+    )
     with maybe_enable_profiling(
         job_config, global_step=train_state.step
     ) as torch_profiler, maybe_enable_memory_snapshot(
@@ -378,7 +386,8 @@ def main(job_config: JobConfig):
                     "memory/num_alloc_retries": device_mem_stats.num_alloc_retries,
                     "memory/num_ooms": device_mem_stats.num_ooms,
                 }
-                metric_logger.log(metrics, step=train_state.step)
+                wandb.log(metrics)
+                #metric_logger.log(metrics, step=train_state.step)
 
                 logger.info(
                     f"{color.cyan}step: {train_state.step:2}  "

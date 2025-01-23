@@ -56,12 +56,13 @@ tomli==2.2.1
 torch==2.7.0.dev20250118+cu126
 torchdata==0.10.1
 torchtitan @ git+https://github.com/pytorch/torchtitan.git@d9898423ecef131825d13c6c8b521a24e889785f
+torchvision==0.22.0.dev20250118+cu126
 tqdm==4.67.1
 transformers==4.48.0
 typing-extensions==4.12.2
 tzdata==2024.2
 urllib3==2.3.0
-vllm @ git+https://github.com/vllm-project/vllm.git@1e60f87bb37bc28410e6cf6e9030e9a28ad49d12
+#vllm @ git+https://github.com/vllm-project/vllm.git@1e60f87bb37bc28410e6cf6e9030e9a28ad49d12
 wheel==0.45.1
 xxhash==3.5.0
 yarl==1.18.3
