@@ -50,8 +50,9 @@ c4_config = DatasetConfig(
 )
 
 STRIDE = 100
-NUM_TOKENS = 5
-FUT_COEFF = 0.1
+NUM_TOKENS = 1
+RANGES = 5
+FUT_COEFF = 1.0
 
 # Enable debug tracing on failure: https://pytorch.org/docs/stable/elastic/errors.html
 @record
@@ -144,11 +145,15 @@ def main(job_config: JobConfig):
             pred.logits.flatten(0, 1).float(), labels.flatten(0, 1)
         )
         
-        fut_labels = torch.full_like(labels[:, :, None].expand(-1, -1, NUM_TOKENS), -100)
-        fut_labels[:, : - (STRIDE + NUM_TOKENS - 1)].copy_(labels[:, STRIDE:].unfold(1, NUM_TOKENS, 1))
-        fut_ce_loss = torch.nn.functional.cross_entropy(
-            pred.future_logits.flatten(0, 2).float(), fut_labels.flatten()
-        )
+        fut_logits = torch.nn.functional.log_softmax(pred.future_logits.float(), dim=-1)
+        for i in range(NUM_TOKENS):
+            for r in range(RANGES):
+                if i == 0:
+                    selected_log_probs = torch.gather(fut_logits[:, : - STRIDE - i - r, i], 2, labels[:, STRIDE + i + r:, None])
+                else:
+                    selected_log_probs += torch.gather(fut_logits[:, : - STRIDE - i - r, i], 2, labels[:, STRIDE + i + r:, None])
+        fut_ce_loss = - selected_log_probs.mean()
+        
         return ce_loss, fut_ce_loss
 
 

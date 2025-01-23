@@ -1,6 +1,7 @@
 import dataclasses
 from typing import Any, Union
-from transformers import Cache, LlamaForCausalLM
+from transformers import Cache, LlamaForCausalLM 
+from transformers.models.llama.modeling_llama import LlamaAttention
 import torch
 from transformers.generation.utils import CausalLMOutputWithPast
 
