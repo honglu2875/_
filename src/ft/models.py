@@ -28,7 +28,7 @@ class LlamaMTPred(torch.nn.Module):
         self.side_dense = torch.nn.Linear(
             hd,
             padded_hd * num_tokens,
-            bias=self.config.attention_bias
+            bias=False,
         ).to(llama.dtype)
 
 

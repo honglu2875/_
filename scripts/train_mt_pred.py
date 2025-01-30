@@ -49,10 +49,10 @@ c4_config = DatasetConfig(
     text_processor=lambda x: x["text"],
 )
 
-STRIDE = 100
+STRIDE = 4
 NUM_TOKENS = 1
-RANGES = 5
-FUT_COEFF = 1.0
+RANGES = 1
+FUT_COEFF = 0.5
 
 # Enable debug tracing on failure: https://pytorch.org/docs/stable/elastic/errors.html
 @record
