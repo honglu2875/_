@@ -1,9 +1,11 @@
 import contextlib
+
+import torch
 from torchtitan.models.llama.model import ModelArgs
 from torchtitan.utils import logger
-from transformers import AutoModelForCausalLM, AutoTokenizer, PretrainedConfig
+from transformers import AutoModelForCausalLM, PretrainedConfig
+
 from ft.tokenizer import WrappedHFTokenizer
-import torch
 
 
 @contextlib.contextmanager
@@ -21,7 +23,10 @@ def maybe_wait(wait: bool):
 def get_model_and_tokenizer(model_name):
     with maybe_wait(wait=torch.distributed.get_node_local_rank() != 0):
         tokenizer = WrappedHFTokenizer(model_name) 
-        model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2", trust_remote_code=True)
+        model = AutoModelForCausalLM.from_pretrained(model_name,
+                                                     torch_dtype=torch.bfloat16,
+                                                     attn_implementation="flash_attention_2",
+                                                     trust_remote_code=True)
         model.config.use_cache = False
         model.eval()
 

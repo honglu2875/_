@@ -1,7 +1,7 @@
-from typing import Dict, List, Tuple
 import torch
-from vllm.worker.worker import Worker
 from vllm.distributed.parallel_state import get_world_group
+from vllm.worker.worker import Worker
+
 from ft.logging import init_logger
 
 logger = init_logger(__name__)

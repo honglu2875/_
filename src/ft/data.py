@@ -1,11 +1,9 @@
+from typing import Any
+
 import torch
-from typing import Any, Callable
 from datasets.distributed import split_dataset_by_node
-from torchtitan.datasets.hf_datasets import DPAwareDataLoader, DatasetConfig, HuggingFaceDataset
-from torchtitan.datasets.tokenizer import Tokenizer
+from torchtitan.datasets.hf_datasets import DatasetConfig, DPAwareDataLoader, HuggingFaceDataset
 from torchtitan.utils import logger
-
-
 
 
 class Dataset(HuggingFaceDataset):

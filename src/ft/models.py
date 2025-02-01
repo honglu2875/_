@@ -1,12 +1,11 @@
 import dataclasses
-from typing import Any, Union
-from transformers import Cache, LlamaForCausalLM 
-from transformers.models.llama.modeling_llama import LlamaAttention
+from typing import Any
+
 import torch
+from transformers import Cache, LlamaForCausalLM
 from transformers.generation.utils import CausalLMOutputWithPast
 
-
-AnyCache = Union[Cache, list[torch.Tensor]]
+AnyCache = Cache | list[torch.Tensor]
 
 
 @dataclasses.dataclass

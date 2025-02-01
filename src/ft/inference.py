@@ -1,11 +1,12 @@
+import time
 from contextlib import contextmanager
+from dataclasses import dataclass
+
 import torch
 import torch.nn.functional as F
-import time
-from dataclasses import dataclass
-from typing import Optional, Tuple, Dict
 from transformers import AutoModelForCausalLM, AutoTokenizer, PreTrainedModel
 from transformers.cache_utils import StaticCache
+
 
 @dataclass
 class GenerationConfig:
@@ -22,20 +23,20 @@ class GenerationConfig:
 class TimingStats:
     prefill_time: float = 0.0
     total_decode_time: float = 0.0
-    decode_times: list = None
+    decode_times: list | None = None
     tokens_generated: int = 0
     
     def __post_init__(self):
         self.decode_times = []
     
-    def get_summary(self) -> Dict[str, float]:
+    def get_summary(self) -> dict[str, float]:
         avg_decode_time = sum(self.decode_times) / len(self.decode_times) if self.decode_times else 0
         return {
             "prefill_time": self.prefill_time,
             "total_decode_time": self.total_decode_time,
             "tokens_per_sec": self.tokens_generated / self.total_decode_time if self.total_decode_time else 0,
             "avg_decode_time": avg_decode_time,
-            "total_time": self.compile_prefill_time + self.compile_decode_time + self.prefill_time + self.total_decode_time
+            "total_time": self.prefill_time + self.total_decode_time
         }
 
 @contextmanager
@@ -98,8 +99,8 @@ class PrefillModel(torch.nn.Module):
         input_ids: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         cache_position: torch.Tensor | None = None,
-        past_key_values: Optional[StaticCache] = None,
-    ) -> Tuple[torch.Tensor, StaticCache]:
+        past_key_values: StaticCache | None = None,
+    ) -> tuple[torch.Tensor, StaticCache]:
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -111,9 +112,18 @@ class PrefillModel(torch.nn.Module):
 
 def next_buffer(buffer: torch.Tensor, block_size: int, fill=None):
     if fill:
-        new_buffer = torch.full((buffer.shape[0], buffer.shape[1] + block_size), fill, dtype=buffer.dtype, device=buffer.device)
+        new_buffer = torch.full(
+            (buffer.shape[0], buffer.shape[1] + block_size),
+            fill,
+            dtype=buffer.dtype,
+            device=buffer.device
+        )
     else:
-        new_buffer = torch.zeros((buffer.shape[0], buffer.shape[1] + block_size), dtype=buffer.dtype, device=buffer.device)
+        new_buffer = torch.zeros(
+            (buffer.shape[0], buffer.shape[1] + block_size),
+            dtype=buffer.dtype,
+            device=buffer.device
+        )
     new_buffer[:, :buffer.shape[1]].copy_(buffer)
     return new_buffer
 
@@ -131,8 +141,8 @@ class DecodeOneTokenModel(torch.nn.Module):
         input_ids: torch.Tensor,  # shape: (batch_size, 1)
         attention_mask: torch.Tensor | None = None,  # shape: (batch_size, block_size)
         cache_position: torch.Tensor | None = None,  # shape: (1,)
-        past_key_values: Optional[StaticCache] = None,
-    ) -> Tuple[torch.Tensor, StaticCache]:
+        past_key_values: StaticCache | None = None,
+    ) -> tuple[torch.Tensor, StaticCache]:
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -145,10 +155,10 @@ class DecodeOneTokenModel(torch.nn.Module):
 def generate(
     model: PreTrainedModel,
     input_ids: torch.Tensor,
-    generation_config: Optional[GenerationConfig] = None,
-    static_cache: Optional[StaticCache] = None,
+    generation_config: GenerationConfig | None = None,
+    static_cache: StaticCache | None = None,
     block_size: int = 1024,
-) -> Tuple[torch.Tensor, TimingStats]:
+) -> tuple[torch.Tensor, TimingStats]:
     """
     Performs autoregressive generation with static cache and block-wise processing.
     
@@ -217,7 +227,7 @@ def generate(
         
         with timeit(timing_stats, "total_decode_time"):
             for block_idx in range(num_blocks):
-                for pos_in_block in range(pos % block_size, min(block_size, max_new_tokens - block_idx * block_size)):
+                for _pos_in_block in range(pos % block_size, min(block_size, max_new_tokens - block_idx * block_size)):
                     with timeit(timing_stats, "decode_times", append=True):
                         # Sample next token
                         if generation_config.temperature != 1.0:

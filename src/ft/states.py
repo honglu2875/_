@@ -1,8 +1,10 @@
+import dataclasses
 from io import BytesIO
 from typing import Any
+
 import torch
-from torchtitan.checkpoint import CheckpointManager, TrainState
-import dataclasses
+from torchtitan.checkpoint import TrainState
+
 
 @dataclasses.dataclass
 class MTPredTrainState(TrainState):

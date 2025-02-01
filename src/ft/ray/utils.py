@@ -1,11 +1,12 @@
 import dataclasses
 from functools import cached_property
-from typing import List, Tuple
+
 import ray
-from ray.util.placement_group import PlacementGroup, placement_group
+from ray.util.placement_group import placement_group
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
-from ft.ray.mock_learner import MockLearner
 from vllm import LLM
+
+from ft.ray.mock_learner import MockLearner
 
 
 @dataclasses.dataclass
@@ -60,7 +61,7 @@ def create_llm_workers(
             model=model_name,
             tensor_parallel_size=resources.vllm.gpu,  # assume tp = gpus each worker
             worker_cls="ft.ray.vllm_worker.EnhancedVLLMWorker",
-        ) for i, args in zip(range(resources.vllm.n_worker), ray_args)
+        ) for i, args in zip(range(resources.vllm.n_worker), ray_args, strict=False)
     ]
 
 def create_mock_learner(
@@ -77,6 +78,6 @@ def create_mock_learner(
     return [
         ray.remote(**args)(MockLearner).remote(
             model=model_name,
-        ) for i, args in zip(range(resources.learner.n_worker), ray_args)
+        ) for i, args in zip(range(resources.learner.n_worker), ray_args, strict=False)
     ]
 
