@@ -30,9 +30,8 @@ class LlamaMTPred(torch.nn.Module):
             bias=False,
         ).to(llama.dtype)
 
-
     def forward(
-        self, 
+        self,
         input_ids: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
@@ -91,4 +90,3 @@ class LlamaMTPred(torch.nn.Module):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-        

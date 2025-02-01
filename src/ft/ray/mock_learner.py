@@ -9,12 +9,8 @@ from ft.ray.base_actor import BaseActor
 
 class MockLearner(BaseActor):
     """Learner for simulating weight updates with Gaussian noise."""
-    
-    def __init__(
-        self,
-        model: str,
-        update_interval: float = 5.0
-    ):
+
+    def __init__(self, model: str, update_interval: float = 5.0):
         super().__init__()
 
         self.model = AutoModelForCausalLM.from_pretrained(model)
@@ -30,22 +26,17 @@ class MockLearner(BaseActor):
         """Simulate weight updates with Gaussian noise."""
         time.sleep(self.update_interval)
         param_info = []
-        
+
         with torch.no_grad():
             for name, dtype, shape in self.weight_info:
                 param = self.model.state_dict()[name]
                 noise = torch.randn_like(param) * 0.01
                 param.add_(noise)
                 param_info.append((name, dtype, shape))
-                
-                self._sync_comm.broadcast(
-                    param,
-                    src=0,
-                    stream=torch.cuda.current_stream()
-                )
-        
+
+                self._sync_comm.broadcast(param, src=0, stream=torch.cuda.current_stream())
+
         self._weight_version += 1
 
     def get_weight_version(self) -> int:
         return self._weight_version
-

@@ -20,10 +20,7 @@ class JobConfig(TitanConfig):
     def __init__(self):
         super().__init__()
         self.parser.add_argument(
-            "--training.padding",
-            type=bool,
-            default=False,
-            help="Whether to use padding dataloader."
+            "--training.padding", type=bool, default=False, help="Whether to use padding dataloader."
         )
         """
         self.parser.add_argument(

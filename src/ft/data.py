@@ -54,7 +54,7 @@ class PaddingDataset(Dataset):
                 if len(sample_tokens > self.seq_len + 1):
                     continue
                 input = torch.LongTensor(sample_tokens)
-                label = input[1:] 
+                label = input[1:]
                 yield input, label
 
             if not self.infinite:
@@ -64,6 +64,7 @@ class PaddingDataset(Dataset):
                 # Reset offset for the next iteration
                 self._sample_idx = 0
                 logger.warning(f"Dataset {self.dataset_name} is being re-looped")
+
 
 def build_hf_data_loader(
     dataset_config: DatasetConfig,
@@ -77,7 +78,5 @@ def build_hf_data_loader(
 ):
     """Build a data loader for HuggingFace datasets."""
     cls = PaddingDataset if padding else Dataset
-    hf_ds = cls(
-        dataset_config, tokenizer, seq_len, world_size, rank, infinite
-    )
+    hf_ds = cls(dataset_config, tokenizer, seq_len, world_size, rank, infinite)
     return DPAwareDataLoader(rank, hf_ds, batch_size=batch_size)

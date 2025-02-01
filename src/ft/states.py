@@ -20,4 +20,3 @@ class MTPredTrainState(TrainState):
         super().load_state_dict(state_dict)
         state_dict["global_avg_fut_losses"].seek(0)
         self.global_avg_fut_losses = torch.load(state_dict["global_avg_fut_losses"])
-

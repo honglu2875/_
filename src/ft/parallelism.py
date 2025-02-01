@@ -53,7 +53,6 @@ def apply_fsdp(
     fully_shard(model, **fsdp_config, reshard_after_forward=not pp_enabled)
 
 
-
 def apply_ddp(
     model: nn.Module,
     dp_mesh: DeviceMesh,
@@ -117,8 +116,7 @@ def parallelize_model(
     if job_config.training.compile:
         if job_config.model.norm_type == "fused_rmsnorm":
             raise NotImplementedError(
-                "fused_rmsnorm is not compatible with torch.compile yet. "
-                "Please use rmsnorm or layernorm."
+                "fused_rmsnorm is not compatible with torch.compile yet. Please use rmsnorm or layernorm."
             )
         apply_compile(model_layers)
 
@@ -159,5 +157,3 @@ def parallelize_model(
             enable_compile=job_config.training.compile,
             enable_compiled_autograd=job_config.experimental.enable_compiled_autograd,
         )
-
-
