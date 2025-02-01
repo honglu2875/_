@@ -60,5 +60,3 @@ def hf_to_titan_config(hf_config: PretrainedConfig) -> ModelArgs:
     )
     return titan_config
 
-
-
