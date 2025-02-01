@@ -31,11 +31,10 @@ c4_config = DatasetConfig(
 )
 
 
-
 class Trainer:
     """Main trainer class that orchestrates the training process"""
 
-    def __init__(self, job_config):
+    def __init__(self, job_config: JobConfig):
         self.job_config = job_config
         logger.info(f"Starting job: {job_config.job.description}")
 
