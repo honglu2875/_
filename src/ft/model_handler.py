@@ -1,7 +1,7 @@
 from torchtitan import utils
 from torchtitan.float8 import Float8Handler
 from torchtitan.logging import logger
-from transformers import GPTNeoXForCausalLM, PreTrainedModel, PreTrainedTokenizer
+from transformers import GPTNeoXForCausalLM, PreTrainedModel
 
 from ft.mesh_handler import MeshHandler
 from ft.parallelism import parallelize_model
@@ -11,9 +11,8 @@ from ft.utils import hf_to_titan_config
 class ModelHandler:
     """Handles model initialization and configuration"""
 
-    def __init__(self, model: PreTrainedModel, tokenizer: PreTrainedTokenizer, job_config, dist_handler: MeshHandler):
+    def __init__(self, model: PreTrainedModel, job_config, dist_handler: MeshHandler):
         self.model = model
-        self.tokenizer = tokenizer
         self.job_config = job_config
         self.dist_handler = dist_handler
 

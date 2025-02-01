@@ -2,7 +2,7 @@ import logging
 import os
 
 
-def init_logger(name: str | None = None) -> logging.Logger:
+def init_logger(name: str | None = None) -> "logging.Logger":
     if name is not None:
         logger = logging.getLogger(name)
     else:

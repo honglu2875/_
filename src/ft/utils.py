@@ -1,4 +1,6 @@
 import contextlib
+import functools
+from typing import Callable
 
 import torch
 from torchtitan.models.llama.model import ModelArgs
@@ -19,12 +21,19 @@ def maybe_wait(wait: bool):
     if not wait:
         torch.distributed.barrier()
 
+def only_rank0(fn: Callable):
+    @functools.wraps(fn)
+    def _fn(*args, **kwargs):
+        if torch.distributed.get_rank() != 0:
+            return
+        return fn(*args, **kwargs)
+    return _fn
 
 def get_model_and_tokenizer(model_name):
     with maybe_wait(wait=torch.distributed.get_node_local_rank() != 0):
         tokenizer = WrappedHFTokenizer(model_name)
         model = AutoModelForCausalLM.from_pretrained(
-            model_name, torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2", trust_remote_code=True
+            model_name, torch_dtype=torch.bfloat16, attn_implementation="sdpa", trust_remote_code=True
         )
         model.config.use_cache = False
         model.eval()

@@ -1,3 +1,4 @@
+import dataclasses
 import time
 
 import torch
@@ -5,7 +6,6 @@ from datasets import load_dataset
 from torchtitan import utils
 from torchtitan.checkpoint import CheckpointManager, TrainState
 from torchtitan.datasets.hf_datasets import DatasetConfig
-from torchtitan.logging import init_logger, logger
 from torchtitan.metrics import build_device_memory_monitor
 from torchtitan.optimizer import build_lr_schedulers, build_optimizers
 from torchtitan.utils import device_type
@@ -13,10 +13,16 @@ from torchtitan.utils import device_type
 import wandb
 from ft.data import build_hf_data_loader
 from ft.job_config import JobConfig
+from ft.logging import init_logger 
 from ft.mesh_handler import MeshHandler
 from ft.model_handler import ModelHandler
-from ft.training_monitor import TrainingMonitor
+from ft.states import Metadata
+from ft.training_monitor import TrainingMonitor, timeit
 from ft.utils import get_model_and_tokenizer
+
+
+logger = init_logger(__name__)
+
 
 c4_config = DatasetConfig(
     path="allenai/c4",
@@ -25,11 +31,11 @@ c4_config = DatasetConfig(
 )
 
 
+
 class Trainer:
     """Main trainer class that orchestrates the training process"""
 
     def __init__(self, job_config):
-        init_logger()
         self.job_config = job_config
         logger.info(f"Starting job: {job_config.job.description}")
 
@@ -39,7 +45,7 @@ class Trainer:
 
         # Initialize model and tokenizer
         model, tokenizer = get_model_and_tokenizer(job_config.model.name)
-        self.model_handler = ModelHandler(model, tokenizer, job_config, self.mesh_handler)
+        self.model_handler = ModelHandler(model, job_config, self.mesh_handler)
 
         # Setup data loading
         self.data_loader = build_hf_data_loader(
@@ -97,11 +103,11 @@ class Trainer:
             gc_handler.run(self.train_state.step)
 
             # Training step
-            loss = self._training_step(data_iterator)
+            loss, metadata = self._training_step(data_iterator)
 
             # Log metrics
             self.monitor.log_batch_stats(
-                self.train_state, loss, self.model_handler.num_flop_per_token, self.mesh_handler.world_mesh
+                self.train_state, loss, metadata, self.model_handler.num_flop_per_token, self.mesh_handler.world_mesh
             )
 
             # Save checkpoint
@@ -109,13 +115,12 @@ class Trainer:
 
         logger.info("Training completed")
 
-    def _training_step(self, data_iterator):
+    def _training_step(self, data_iterator) -> tuple[torch.Tensor, Metadata]:
         """Execute single training step"""
-        # Get batch
-        data_load_start = time.perf_counter()
-        batch = next(data_iterator)
-        input_ids, labels = batch
-        self.monitor.data_loading_times.append(time.perf_counter() - data_load_start)
+        with timeit(self.monitor, "data_loading_times", append=True):
+            # Get batch
+            batch = next(data_iterator)
+            input_ids, labels = batch
 
         # Move to device
         input_ids = input_ids.to(device_type)
@@ -146,7 +151,15 @@ class Trainer:
         # Float8 updates
         self.model_handler.float8_handler.precompute_float8_dynamic_scale_for_fsdp([self.model_handler.model])
 
-        return loss
+        # Record metadata
+        with torch.no_grad():
+            num_tokens = (labels != -100).sum().unsqueeze(0).to(torch.int32).detach()
+            num_tokens_full = input_ids.shape[1]
+
+        return loss, Metadata(
+            num_tokens=num_tokens,
+            num_tokens_full=num_tokens_full,
+        )
 
 
 def main():
