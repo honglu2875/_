@@ -11,41 +11,35 @@ import os
 import time
 from datetime import timedelta
 
-from datasets import load_dataset
 import torch
-
+from datasets import load_dataset
 from torch.distributed.elastic.multiprocessing.errors import record
+from transformers import GPTNeoXForCausalLM
 
+import wandb
+from ft.data import build_hf_data_loader
+from ft.job_config import JobConfig
+from ft.parallelism import parallelize_model
+from ft.utils import get_model_and_tokenizer, hf_to_titan_config
 from torchtitan import utils
 from torchtitan.checkpoint import CheckpointManager, TrainState
-from transformers import GPTNeoXForCausalLM
-from transformers.modeling_outputs import CausalLMOutput
-from ft.job_config import JobConfig
-from torchtitan.datasets import build_tokenizer
 from torchtitan.datasets.hf_datasets import DatasetConfig
-from ft.data import build_hf_data_loader
 from torchtitan.float8 import Float8Handler
 from torchtitan.logging import init_logger, logger
 from torchtitan.metrics import build_device_memory_monitor, build_metric_logger
 from torchtitan.optimizer import build_lr_schedulers, build_optimizers
 from torchtitan.parallelisms import (
-    models_parallelize_fns,
-    models_pipelining_fns,
     ParallelDims,
 )
 from torchtitan.profiling import maybe_enable_memory_snapshot, maybe_enable_profiling
 from torchtitan.utils import device_module, device_type
-import wandb
-
-from ft.parallelism import parallelize_model
-from ft.utils import get_model_and_tokenizer, hf_to_titan_config
-
 
 c4_config = DatasetConfig(
     path="allenai/c4",
     loader=lambda path: load_dataset(path, name="en", split="train", streaming=True),
     text_processor=lambda x: x["text"],
 )
+
 
 # Enable debug tracing on failure: https://pytorch.org/docs/stable/elastic/errors.html
 @record
@@ -93,9 +87,7 @@ def main(job_config: JobConfig):
         pp_mesh = world_mesh["pp"]
 
     # Set random seed, and maybe enable deterministic mode (mainly for debugging, expect perf loss)
-    utils.set_determinism(
-        world_mesh, device, job_config.training.seed, job_config.training.deterministic
-    )
+    utils.set_determinism(world_mesh, device, job_config.training.seed, job_config.training.deterministic)
     model_name = job_config.model.name
 
     model, tokenizer = get_model_and_tokenizer(model_name)
@@ -131,9 +123,7 @@ def main(job_config: JobConfig):
 
     # loss function to be shared by Pipeline Parallel and SPMD training
     def loss_fn(pred, labels):
-        return torch.nn.functional.cross_entropy(
-            pred.flatten(0, 1).float(), labels.flatten(0, 1)
-        )
+        return torch.nn.functional.cross_entropy(pred.flatten(0, 1).float(), labels.flatten(0, 1))
 
     # TODO: compiling loss function causes CUDA errors, turning off for now
     # if job_config.training.compile:
@@ -194,12 +184,8 @@ def main(job_config: JobConfig):
     )
 
     if job_config.checkpoint.create_seed_checkpoint:
-        assert (
-            world_size == 1
-        ), "Must create seed checkpoint using a single device, to disable sharding"
-        assert (
-            job_config.checkpoint.enable_checkpoint
-        ), "Must enable checkpointing when creating a seed checkpoint"
+        assert world_size == 1, "Must create seed checkpoint using a single device, to disable sharding"
+        assert job_config.checkpoint.enable_checkpoint, "Must enable checkpointing when creating a seed checkpoint"
         checkpoint.save(curr_step=0, force=True)
         logger.info("Created seed checkpoint")
         return
@@ -246,11 +232,10 @@ def main(job_config: JobConfig):
         project="mt_pred",
         config=job_config.args_dict,
     )
-    with maybe_enable_profiling(
-        job_config, global_step=train_state.step
-    ) as torch_profiler, maybe_enable_memory_snapshot(
-        job_config, global_step=train_state.step
-    ) as memory_profiler:
+    with (
+        maybe_enable_profiling(job_config, global_step=train_state.step) as torch_profiler,
+        maybe_enable_memory_snapshot(job_config, global_step=train_state.step) as memory_profiler,
+    ):
         while train_state.step < job_config.training.steps:
             train_state.step += 1
             gc_handler.run(train_state.step)
@@ -296,9 +281,7 @@ def main(job_config: JobConfig):
                 # accumulate losses across pipeline microbatches
                 # TODO: PP+FSDP unexpectedly puts the loss back to the CPU
                 loss = (
-                    torch.mean(torch.stack(losses)).to(device)
-                    if is_last_stage
-                    else torch.tensor([-1.0], device=device)
+                    torch.mean(torch.stack(losses)).to(device) if is_last_stage else torch.tensor([-1.0], device=device)
                 )
             else:
                 # Non-PP forward / backward
@@ -332,15 +315,8 @@ def main(job_config: JobConfig):
             float8_handler.precompute_float8_dynamic_scale_for_fsdp(model_parts)
 
             # log metrics
-            if (
-                train_state.step == 1
-                or train_state.step % job_config.metrics.log_freq == 0
-            ):
-                if (
-                    parallel_dims.dp_replicate_enabled
-                    or parallel_dims.dp_shard_enabled
-                    or parallel_dims.cp_enabled
-                ):
+            if train_state.step == 1 or train_state.step % job_config.metrics.log_freq == 0:
+                if parallel_dims.dp_replicate_enabled or parallel_dims.dp_shard_enabled or parallel_dims.cp_enabled:
                     loss = loss.detach()
                     global_avg_loss, global_max_loss = (
                         utils.dist_mean(loss, world_mesh["dp_cp"]),
@@ -357,9 +333,7 @@ def main(job_config: JobConfig):
                 time_delta = time.perf_counter() - time_last_log
 
                 # tokens per second per device, abbreviated as tps
-                tps = ntokens_since_last_log / (
-                    time_delta * parallel_dims.non_data_parallel_size
-                )
+                tps = ntokens_since_last_log / (time_delta * parallel_dims.non_data_parallel_size)
                 # model FLOPS utilization
                 # For its definition and calculation, please refer to the PaLM paper:
                 # https://arxiv.org/abs/2204.02311
@@ -387,7 +361,7 @@ def main(job_config: JobConfig):
                     "memory/num_ooms": device_mem_stats.num_ooms,
                 }
                 wandb.log(metrics)
-                #metric_logger.log(metrics, step=train_state.step)
+                # metric_logger.log(metrics, step=train_state.step)
 
                 logger.info(
                     f"{color.cyan}step: {train_state.step:2}  "
@@ -403,9 +377,7 @@ def main(job_config: JobConfig):
                 time_last_log = time.perf_counter()
                 device_memory_monitor.reset_peak_stats()
 
-            checkpoint.save(
-                train_state.step, force=(train_state.step == job_config.training.steps)
-            )
+            checkpoint.save(train_state.step, force=(train_state.step == job_config.training.steps))
 
             # signal the profiler that the next profiling step has started
             if torch_profiler:

@@ -1,8 +1,8 @@
-from vllm.utils import get_ip, get_open_port
-from ft.ray.utils import ResourceAssignment, ResourceConfig, create_llm_workers, create_mock_learner
-from vllm.sampling_params import SamplingParams
 import ray
+from vllm.sampling_params import SamplingParams
+from vllm.utils import get_ip, get_open_port
 
+from ft.ray.utils import ResourceAssignment, ResourceConfig, create_llm_workers, create_mock_learner
 
 ra = ResourceAssignment(
     vllm=ResourceConfig(gpu=2, cpu=4, n_worker=2),
@@ -19,13 +19,10 @@ prompts = [
     "The future of artificial intelligence is",
     "The most interesting scientific discovery is",
     "The key to sustainable energy lies in",
-    "Space exploration will lead to"
+    "Space exploration will lead to",
 ]
 
-sampling_params = SamplingParams(
-    temperature=0.7,
-    max_tokens=100
-)
+sampling_params = SamplingParams(temperature=0.7, max_tokens=100)
 
 ref = []
 for w in workers:
@@ -36,7 +33,7 @@ print(out)
 ref = []
 ref.append(learners[0].init_sync_group.remote(master_addr, master_port, 5))
 for i, w in enumerate(workers):
-    ref.append(w.collective_rpc.remote("init_weight_sync_group", args=(master_addr, master_port, 1 + i*2, 5)))
+    ref.append(w.collective_rpc.remote("init_weight_sync_group", args=(master_addr, master_port, 1 + i * 2, 5)))
 ray.get(ref)
 
 weight_info = ray.get(learners[0].get_weight_info.remote())
@@ -46,7 +43,6 @@ for _ in range(10):
     for w in workers:
         ref.append(w.collective_rpc.remote("update_weights", args=(weight_info,)))
     ray.get(ref)
-
 
     ref = []
     for w in workers:

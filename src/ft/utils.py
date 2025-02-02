@@ -1,13 +1,13 @@
 import contextlib
 import functools
-from typing import Callable
+from collections.abc import Callable
 
 import torch
-from torchtitan.models.llama.model import ModelArgs
-from torchtitan.utils import logger
 from transformers import AutoModelForCausalLM, PretrainedConfig
 
 from ft.tokenizer import WrappedHFTokenizer
+from torchtitan.models.llama.model import ModelArgs
+from torchtitan.utils import logger
 
 
 @contextlib.contextmanager
@@ -21,13 +21,16 @@ def maybe_wait(wait: bool):
     if not wait:
         torch.distributed.barrier()
 
+
 def only_rank0(fn: Callable):
     @functools.wraps(fn)
     def _fn(*args, **kwargs):
         if torch.distributed.get_rank() != 0:
             return
         return fn(*args, **kwargs)
+
     return _fn
+
 
 def get_model_and_tokenizer(model_name):
     with maybe_wait(wait=torch.distributed.get_node_local_rank() != 0):

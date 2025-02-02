@@ -1,7 +1,9 @@
 import dataclasses
-from typing import Any
 import os
+from typing import Any
+
 import ray
+
 from ft.ray.ray_utils import ray_noset_visible_devices
 
 
@@ -26,4 +28,3 @@ class DistInfo:  # metadata about the current process in the cluster
         assert key in args
         args[key] = val
         return DistInfo(**args)
-

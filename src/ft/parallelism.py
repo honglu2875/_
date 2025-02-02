@@ -6,11 +6,11 @@ from torch.distributed._composable.fsdp import (
     fully_shard,
 )
 from torch.distributed._composable.replicate import replicate
+
+from ft.job_config import JobConfig
 from torchtitan.parallelisms import ParallelDims
 from torchtitan.parallelisms.parallelize_llama import _apply_ac_to_transformer_block
 from torchtitan.utils import DeviceMesh, logger
-
-from ft.job_config import JobConfig
 
 TORCH_DTYPE_MAP = {
     "float16": torch.float16,

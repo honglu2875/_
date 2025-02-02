@@ -1,11 +1,11 @@
-from torchtitan import utils
-from torchtitan.float8 import Float8Handler
-from torchtitan.logging import logger
 from transformers import GPTNeoXForCausalLM, PreTrainedModel
 
 from ft.mesh_handler import MeshHandler
 from ft.parallelism import parallelize_model
 from ft.utils import hf_to_titan_config
+from torchtitan import utils
+from torchtitan.float8 import Float8Handler
+from torchtitan.logging import logger
 
 
 class ModelHandler:

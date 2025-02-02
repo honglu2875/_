@@ -3,6 +3,7 @@ from io import BytesIO
 from typing import Any
 
 import torch
+
 from torchtitan.checkpoint import TrainState
 
 

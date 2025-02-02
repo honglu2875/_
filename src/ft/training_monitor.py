@@ -3,13 +3,13 @@ import time
 
 import torch
 from torch.distributed.device_mesh import DeviceMesh
+
+import wandb
+from ft.logging import init_logger
+from ft.states import Metadata
 from torchtitan import utils
 from torchtitan.checkpoint import TrainState
 from torchtitan.metrics import build_device_memory_monitor, build_metric_logger
-from ft.logging import init_logger
-from ft.states import Metadata
-
-import wandb
 
 logger = init_logger(__name__)
 
@@ -33,10 +33,15 @@ class TrainingMonitor:
         self.time_last_log = time.perf_counter()
         self.color = utils.NoColor if job_config.metrics.disable_color_printing else utils.Color
 
-    def log_batch_stats(self, train_state: TrainState, loss: torch.Tensor,
-                        metadata: Metadata,
-                        num_flop_per_token: int, world_mesh: DeviceMesh, disabled:
-                        bool = False):
+    def log_batch_stats(
+        self,
+        train_state: TrainState,
+        loss: torch.Tensor,
+        metadata: Metadata,
+        num_flop_per_token: int,
+        world_mesh: DeviceMesh,
+        disabled: bool = False,
+    ):
         """Log training metrics for current batch"""
         self.ntokens_since_last_log_local_full += metadata.num_tokens_full
         tokens_passed = utils.dist_reduce(metadata.num_tokens, "SUM", world_mesh["dp_cp"])
@@ -116,7 +121,11 @@ class TrainingMonitor:
 @contextlib.contextmanager
 def timeit(monitor: TrainingMonitor, key: str, append: bool = True):
     assert isinstance(monitor, TrainingMonitor)
-    _SUPPORTED = set(["data_loading_times",])
+    _SUPPORTED = set(
+        [
+            "data_loading_times",
+        ]
+    )
     if key not in _SUPPORTED:
         raise ValueError(f"key {key} is not supported.")
     if not hasattr(monitor, key):
@@ -129,6 +138,3 @@ def timeit(monitor: TrainingMonitor, key: str, append: bool = True):
         getattr(monitor, key).append(time.perf_counter() - start)
     else:
         setattr(monitor, key, time.perf_counter() - start)
-
-
-

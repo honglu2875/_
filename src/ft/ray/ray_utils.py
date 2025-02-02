@@ -1,6 +1,4 @@
 import os
-import dataclasses
-from typing import Any
 
 
 def ray_noset_visible_devices(env_vars=os.environ):
@@ -22,4 +20,3 @@ def ray_noset_visible_devices(env_vars=os.environ):
         "RAY_EXPERIMENTAL_NOSET_ONEAPI_DEVICE_SELECTOR",
     ]
     return any(env_vars.get(env_var) for env_var in NOSET_VISIBLE_DEVICES_ENV_VARS_LIST)
-
