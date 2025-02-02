@@ -1,7 +1,7 @@
 import torch
-from datasets import load_dataset
 
 import wandb
+from ft.custom_datasets import DATASETS
 from ft.data import build_hf_data_loader
 from ft.job_config import JobConfig
 from ft.logging import init_logger
@@ -12,19 +12,11 @@ from ft.training_monitor import TrainingMonitor, timeit
 from ft.utils import get_model_and_tokenizer
 from torchtitan import utils
 from torchtitan.checkpoint import CheckpointManager, TrainState
-from torchtitan.datasets.hf_datasets import DatasetConfig
 from torchtitan.metrics import build_device_memory_monitor
 from torchtitan.optimizer import build_lr_schedulers, build_optimizers
 from torchtitan.utils import device_type
 
 logger = init_logger(__name__)
-
-
-c4_config = DatasetConfig(
-    path="allenai/c4",
-    loader=lambda path: load_dataset(path, name="en", split="train", streaming=True),
-    text_processor=lambda x: x["text"],
-)
 
 
 class Trainer:
@@ -44,7 +36,7 @@ class Trainer:
 
         # Setup data loading
         self.data_loader = build_hf_data_loader(
-            c4_config,
+            DATASETS[job_config.training.dataset],
             tokenizer,
             job_config.training.batch_size,
             job_config.training.seq_len,

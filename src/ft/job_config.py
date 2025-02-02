@@ -22,23 +22,8 @@ class JobConfig(TitanConfig):
         self.parser.add_argument(
             "--training.padding", type=bool, default=False, help="Whether to use padding dataloader."
         )
-        """
-        self.parser.add_argument(
-            "--model.flavor",
-            help=argparse.SUPPRESS,
-        )
-        self.parser.add_argument(
-            "--model.tokenizer_path",
-            help=argparse.SUPPRESS,
-        )
-        self.parser.add_argument(
-            "--training.dataset",
-            help=argparse.SUPPRESS,
-        )
-        """
         remove_argument(self.parser, "--model.flavor")
         remove_argument(self.parser, "--model.tokenizer_path")
-        remove_argument(self.parser, "--training.dataset")
 
     def _validate_config(self) -> None:
         return
