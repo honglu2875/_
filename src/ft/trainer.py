@@ -102,12 +102,27 @@ class Trainer:
 
         logger.info("Training completed")
 
+    def _maybe_trim(self, batch: tuple) -> tuple:
+        """
+        When doing SFT, sometimes samples are too short and contains a huge amount of padding.
+        Other than using a custom kernel of cross entropy, the quickest optimization is simply
+        to cut out fully masked blocks to multiples of 256.
+        """
+        inputs, labels = batch
+        bs, seq = labels.shape
+        # Max sequence lengths are typically multiples of 256; Only adapt for odd cases if the demand is REAL.
+        assert seq % 256 == 0
+        mask = (labels.view(bs, -1, 256) == -100).sum(-1) == 256
+        num_unmasked_block = (mask.sum(0) != bs).sum().item()
+        cutoff = num_unmasked_block * 256
+        return inputs[:, :cutoff], labels[:, :cutoff] 
+
     def _training_step(self, data_iterator) -> tuple[torch.Tensor, Metadata]:
         """Execute single training step"""
         with timeit(self.monitor, "data_loading_times", append=True):
             # Get batch
             batch = next(data_iterator)
-            input_ids, labels = batch
+            input_ids, labels = self._maybe_trim(batch)
 
         # Move to device
         input_ids = input_ids.to(device_type)

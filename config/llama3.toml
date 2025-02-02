@@ -37,8 +37,8 @@ data_parallel_replicate_degree = 1
 data_parallel_shard_degree = -1
 tensor_parallel_degree = 1
 compile = false
-#padding = true
-padding = false
+padding = true
+#padding = false
 
 [experimental]
 context_parallel_degree = 1
