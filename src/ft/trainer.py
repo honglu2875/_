@@ -108,6 +108,9 @@ class Trainer:
         Other than using a custom kernel of cross entropy, the quickest optimization is simply
         to cut out fully masked blocks to multiples of 256.
         """
+        if not self.job_config.training.padding:
+            return batch
+
         inputs, labels = batch
         bs, seq = labels.shape
         # Max sequence lengths are typically multiples of 256; Only adapt for odd cases if the demand is REAL.
