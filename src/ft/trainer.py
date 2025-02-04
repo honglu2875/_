@@ -2,7 +2,7 @@ import torch
 
 import wandb
 from ft.custom_datasets import DATASETS
-from ft.data import build_hf_data_loader
+from ft.data import Batch, build_hf_data_loader
 from ft.job_config import JobConfig
 from ft.logging import init_logger
 from ft.mesh_handler import MeshHandler
@@ -102,7 +102,7 @@ class Trainer:
 
         logger.info("Training completed")
 
-    def _maybe_trim(self, batch: tuple) -> tuple:
+    def _maybe_trim(self, batch: Batch) -> Batch:
         """
         When doing SFT, sometimes samples are too short and contains a huge amount of padding.
         Other than using a custom kernel of cross entropy, the quickest optimization is simply
@@ -111,21 +111,25 @@ class Trainer:
         if not self.job_config.training.padding:
             return batch
 
-        inputs, labels = batch
+        inputs, labels, extra = batch.input_ids, batch.labels, batch.extra
         bs, seq = labels.shape
         # Max sequence lengths are typically multiples of 256; Only adapt for odd cases if the demand is REAL.
         assert seq % 256 == 0
         mask = (labels.view(bs, -1, 256) == -100).sum(-1) == 256
         num_unmasked_block = (mask.sum(0) != bs).sum().item()
         cutoff = num_unmasked_block * 256
-        return inputs[:, :cutoff], labels[:, :cutoff] 
+        return Batch(
+            input_ids=inputs[:, :cutoff],
+            labels=labels[:, :cutoff],
+            extra=extra,
+        )
 
     def _training_step(self, data_iterator) -> tuple[torch.Tensor, Metadata]:
         """Execute single training step"""
         with timeit(self.monitor, "data_loading_times", append=True):
             # Get batch
-            batch = next(data_iterator)
-            input_ids, labels = self._maybe_trim(batch)
+            batch = self._maybe_trim(next(data_iterator))
+            input_ids, labels, extra = batch.input_ids, batch.labels, batch.extra
 
         # Move to device
         input_ids = input_ids.to(device_type)

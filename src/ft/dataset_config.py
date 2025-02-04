@@ -15,6 +15,7 @@ class DatasetConfig:
     path: str
     loader: Callable
     text_processor: Callable
+    # when padding=True, we allow an arbitrary field for additional data attached to each sample
     extra_processor: Callable | None = None
     type: DatasetType = DatasetType.PRETRAIN
 

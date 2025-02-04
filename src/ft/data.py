@@ -1,15 +1,26 @@
+from collections import namedtuple
+from dataclasses import dataclass
 from typing import Any
 
 import datasets
 import numpy as np
 import torch
+from torch.utils.data import IterableDataset
 from datasets.distributed import split_dataset_by_node
+from torchdata.stateful_dataloader import StatefulDataLoader
 
 from ft.dataset_config import DatasetConfig, DatasetMixConfig, DatasetType
 from ft.logging import init_logger
 from torchtitan.datasets.hf_datasets import DPAwareDataLoader, HuggingFaceDataset
 
 logger = init_logger(__name__)
+
+
+@dataclass(frozen=True, slots=True)
+class Batch:
+    input_ids: torch.Tensor
+    labels: torch.Tensor
+    extra: Any
 
 
 class Dataset(HuggingFaceDataset):
@@ -53,6 +64,7 @@ class Dataset(HuggingFaceDataset):
         self._data = split_dataset_by_node(ds, rank, world_size)
         self._tokenizer = tokenizer
         self._text_processor = self.config.text_processor
+        self._extra_processor = getattr(self.config, "extra_processor", lambda *args: None)
 
         # Variables for checkpointing
         self._sample_idx = 0
@@ -63,7 +75,10 @@ class Dataset(HuggingFaceDataset):
         path = config.path
         dataset_loader = config.loader
         ds = dataset_loader(path)
-        logger.info("Loaded dataset: %s, Number of samples: %d.", ds.info.dataset_name, len(ds))
+        if hasattr(ds, "__len__"):
+            logger.info("Loaded dataset: %s, Number of samples: %d.", ds.info.dataset_name, len(ds))
+        else:
+            logger.info("Loaded dataset: %s.", ds.info.dataset_name)
         if shuffle:
             if config.type == DatasetType.PRETRAIN:
                 logger.warning(
@@ -83,7 +98,11 @@ class Dataset(HuggingFaceDataset):
 
     def __iter__(self):
         if not self.padding:
-            yield from super().__iter__()
+            yield from map(lambda ret: Batch(
+                input_ids=ret[0],
+                labels=ret[1],
+                extra=None,  # extra_processor is never invoked on packing
+            ), super().__iter__())
         else:
             while True:
                 for sample in self._get_data_iter():
@@ -93,6 +112,8 @@ class Dataset(HuggingFaceDataset):
                     if len(sample_tokens) > self.seq_len + 1:
                         continue
 
+                    extra = self._extra_processor(sample)
+
                     with torch.no_grad():
                         input = torch.tensor(sample_tokens, dtype=torch.int64)
                         # Allocate+copy is much faster than torch.concat ;)
@@ -100,7 +121,11 @@ class Dataset(HuggingFaceDataset):
                         input_buffer[:input.shape[0] - 1].copy_(input[:-1])
                         label_buffer = torch.full_like(input_buffer, -100)
                         label_buffer[:input.shape[0] - 1].copy_(input[1:])
-                    yield input_buffer, label_buffer
+                    yield Batch(
+                        input_ids=input_buffer,
+                        labels=label_buffer,
+                        extra=extra,
+                    )
 
                 if not self.infinite:
                     logger.warning(f"Dataset {self.dataset_name} has run out of data")
@@ -186,6 +211,22 @@ class MixDataset(HuggingFaceDataset):
         assert isinstance(self._rng.bit_generator, np.random.PCG64)
         self._rng.bit_generator.advance(self._counter)
 
+
+class DataLoader(DPAwareDataLoader):
+    def __init__(self, dp_rank: int, hf_ds: IterableDataset, batch_size: int):
+        StatefulDataLoader.__init__(self, hf_ds, batch_size, collate_fn=self._collate_fn)
+        self._dp_rank = dp_rank
+        self._rank_id = f"dp_rank_{dp_rank}"
+
+    def _collate_fn(self, batches: list[Batch]) -> Batch:
+        return Batch(
+            input_ids=torch.stack([b.input_ids for b in batches], dim=0),
+            labels=torch.stack([b.labels for b in batches], dim=0),
+            extra=[b.extra for b in batches],  # extra can be anything
+        )
+
+
+
       
 def build_hf_data_loader(
     dataset_config: DatasetConfig | DatasetMixConfig,
@@ -200,4 +241,4 @@ def build_hf_data_loader(
     """Build a data loader for HuggingFace datasets."""
     cls = Dataset if isinstance(dataset_config, DatasetConfig) else MixDataset
     hf_ds = cls(dataset_config, tokenizer, seq_len, world_size, rank, infinite, padding=padding)
-    return DPAwareDataLoader(rank, hf_ds, batch_size=batch_size)
+    return DataLoader(rank, hf_ds, batch_size=batch_size)
