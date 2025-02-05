@@ -9,7 +9,7 @@ from ft.mesh_handler import MeshHandler
 from ft.model_handler import ModelHandler
 from ft.states import Metadata
 from ft.training_monitor import TrainingMonitor, timeit
-from ft.utils import get_model_and_tokenizer
+from ft.utils import get_model_and_tokenizer, only_rank0
 from torchtitan import utils
 from torchtitan.checkpoint import CheckpointManager, TrainState
 from torchtitan.metrics import build_device_memory_monitor
@@ -31,8 +31,9 @@ class Trainer:
         self.mesh_handler.setup_deterministic(job_config.training.seed, job_config.training.deterministic)
 
         # Initialize model and tokenizer
-        model, tokenizer = get_model_and_tokenizer(job_config.model.name)
-        self.model_handler = ModelHandler(model, job_config, self.mesh_handler)
+        self.model, tokenizer = get_model_and_tokenizer(job_config.model.name)
+        self.model_handler = ModelHandler(self.model, job_config, self.mesh_handler)
+        self.weight_info = [(name, param.dtype, list(param.shape)) for name, param in self.model.named_parameters()]
 
         # Setup data loading
         self.data_loader = build_hf_data_loader(
@@ -46,14 +47,14 @@ class Trainer:
         )
 
         # Setup optimizers and schedulers
-        self.optimizers = build_optimizers([self.model_handler.model], job_config)
+        self.optimizers = build_optimizers([self.model], job_config)
         self.lr_schedulers = build_lr_schedulers(self.optimizers.optimizers, job_config)
 
         # Initialize training state and checkpointing
         self.train_state = TrainState()
         self.checkpoint = CheckpointManager(
             dataloader=self.data_loader,
-            model_parts=[self.model_handler.model],
+            model_parts=[self.model],
             optimizers=self.optimizers,
             lr_schedulers=self.lr_schedulers,
             states={"train_state": self.train_state},
@@ -71,8 +72,11 @@ class Trainer:
             config=job_config.args_dict,
         )
 
-    def train(self):
-        """Main training loop"""
+    def get_weight_info(self):
+        return self.weight_info
+
+    @only_rank0
+    def _log_train_start(self) -> None:
         logger.info(
             f"Training starts at step {self.train_state.step + 1}, "
             f"with local batch size {self.job_config.training.batch_size}, "
@@ -82,6 +86,10 @@ class Trainer:
             f"(warmup {self.job_config.training.warmup_steps})"
         )
 
+    def train(self):
+        """Main training loop"""
+        self._log_train_start()
+
         data_iterator = iter(self.data_loader)
         gc_handler = utils.GarbageCollection(gc_freq=self.job_config.training.gc_freq)
 
@@ -90,7 +98,7 @@ class Trainer:
             gc_handler.run(self.train_state.step)
 
             # Training step
-            loss, metadata = self._training_step(data_iterator)
+            loss, metadata = self._training_step(next(data_iterator))
 
             # Log metrics
             self.monitor.log_batch_stats(
@@ -124,12 +132,12 @@ class Trainer:
             extra=extra,
         )
 
-    def _training_step(self, data_iterator) -> tuple[torch.Tensor, Metadata]:
+    def _training_step(self, batch: Batch) -> tuple[torch.Tensor, Metadata]:
         """Execute single training step"""
         with timeit(self.monitor, "data_loading_times", append=True):
             # Get batch
-            batch = self._maybe_trim(next(data_iterator))
-            input_ids, labels, extra = batch.input_ids, batch.labels, batch.extra
+            batch = self._maybe_trim(batch)
+            input_ids, labels, _ = batch.input_ids, batch.labels, batch.extra
 
         # Move to device
         input_ids = input_ids.to(device_type)
@@ -137,7 +145,7 @@ class Trainer:
 
         # Forward pass
         self.optimizers.zero_grad()
-        pred = self.model_handler.model(input_ids).logits
+        pred = self.model(input_ids).logits
         loss = torch.nn.functional.cross_entropy(pred.flatten(0, 1).float(), labels.flatten(0, 1))
 
         # Backward pass
@@ -145,20 +153,20 @@ class Trainer:
 
         # Optimizer step
         utils.clip_grad_norm_(
-            [p for p in self.model_handler.model.parameters()],
+            [p for p in self.model.parameters()],
             self.job_config.training.max_norm,
             foreach=True,
             pp_mesh=self.mesh_handler.pp_mesh,
         )
 
-        self.model_handler.float8_handler.sync_float8_amax_and_scale_history([self.model_handler.model])
+        self.model_handler.float8_handler.sync_float8_amax_and_scale_history([self.model])
 
         self.checkpoint.maybe_wait_for_staging()
         self.optimizers.step()
         self.lr_schedulers.step()
 
         # Float8 updates
-        self.model_handler.float8_handler.precompute_float8_dynamic_scale_for_fsdp([self.model_handler.model])
+        self.model_handler.float8_handler.precompute_float8_dynamic_scale_for_fsdp([self.model])
 
         # Record metadata
         with torch.no_grad():

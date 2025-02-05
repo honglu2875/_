@@ -22,6 +22,9 @@ class JobConfig(TitanConfig):
         self.parser.add_argument(
             "--training.padding", type=bool, default=False, help="Whether to use padding dataloader."
         )
+        self.parser.add_argument(
+            "--grpo.kl_coeff", type=float, default=0.1, help="GRPO KL coefficient."
+        )
         remove_argument(self.parser, "--model.flavor")
         remove_argument(self.parser, "--model.tokenizer_path")
 

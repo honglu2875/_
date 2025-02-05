@@ -54,21 +54,18 @@ def create_llm_workers(
     model_name: str,
     resources: ResourceAssignment,
 ) -> list[ray.actor.ActorHandle]:
-    ray_args = [
-        {
-            "scheduling_strategy": PlacementGroupSchedulingStrategy(
-                placement_group=resources.pg["vllm"][i],
-            ),
-        }
-        for i in range(resources.vllm.n_worker)
-    ]
     return [
-        ray.remote(**args)(LLM).remote(
+        ray.remote(
+            num_gpus=resources.vllm.gpu,
+            scheduling_strategy=PlacementGroupSchedulingStrategy(
+                placement_group=resources.pg["vllm"][i],
+            )
+        )(LLM).remote(
             model=model_name,
             tensor_parallel_size=resources.vllm.gpu,  # assume tp = gpus each worker
             worker_cls="ft.ray.vllm_worker.EnhancedVLLMWorker",
         )
-        for i, args in zip(range(resources.vllm.n_worker), ray_args, strict=False)
+        for i in range(resources.vllm.n_worker)
     ]
 
 

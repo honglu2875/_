@@ -22,7 +22,7 @@ class MockLearner(BaseActor):
     def get_weight_info(self):
         return self.weight_info
 
-    def update_weights(self) -> list[tuple[str, torch.dtype, list[int]]]:
+    def update_weights(self):
         """Simulate weight updates with Gaussian noise."""
         time.sleep(self.update_interval)
         param_info = []

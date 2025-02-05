@@ -1,12 +1,11 @@
-from collections import namedtuple
 from dataclasses import dataclass
 from typing import Any
 
 import datasets
 import numpy as np
 import torch
-from torch.utils.data import IterableDataset
 from datasets.distributed import split_dataset_by_node
+from torch.utils.data import IterableDataset
 from torchdata.stateful_dataloader import StatefulDataLoader
 
 from ft.dataset_config import DatasetConfig, DatasetMixConfig, DatasetType
